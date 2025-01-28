@@ -329,6 +329,33 @@ echo_info "Obtaining SSL certificate with Certbot for domain '$XRAY_DOMAIN'..."
 certbot --nginx -d "$XRAY_DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" --redirect
 echo_success "SSL certificate obtained and configured."
 
+# === Begin Modifications After Certbot ===
+echo_info "Modifying Nginx configuration for HTTP/2 support..."
+
+NGINX_SITE="/etc/nginx/sites-available/$XRAY_DOMAIN"
+
+# Replace 'listen 443 ssl; # managed by Certbot' with 'listen 443 ssl http2; # managed by Certbot'
+sed -i 's/listen 443 ssl; # managed by Certbot/listen 443 ssl http2; # managed by Certbot/' "$NGINX_SITE"
+
+# Check if 'listen [::]:443;' exists
+if grep -q "listen \[::\]:443;" "$NGINX_SITE"; then
+    echo_info "'listen [::]:443;' already exists in Nginx configuration."
+else
+    echo_info "'listen [::]:443;'' not found. Adding 'listen [::]:443 ssl http2;' after 'listen 443 ssl http2; # managed by Certbot'."
+    # Insert 'listen [::]:443 ssl http2;' after 'listen 443 ssl http2; # managed by Certbot'
+    sed -i '/listen 443 ssl http2; # managed by Certbot/a \    listen [::]:443 ssl http2;' "$NGINX_SITE"
+    echo_success "'listen [::]:443 ssl http2;' added to Nginx configuration."
+fi
+
+# Test Nginx configuration and reload
+echo_info "Testing Nginx configuration..."
+nginx -t
+
+echo_info "Reloading Nginx to apply changes..."
+systemctl reload nginx
+echo_success "Nginx configuration updated for HTTP/2 support."
+# === End Modifications After Certbot ===
+
 # 21) Gather and display key details
 echo_info "Gathering system and configuration details..."
 
