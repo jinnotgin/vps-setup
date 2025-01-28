@@ -292,6 +292,10 @@ server {
     root /var/www/html;
     index index.html index.htm index.nginx-debian.html;
 
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+    
     location / {
         try_files \$uri \$uri/ =404;
     }
