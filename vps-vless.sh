@@ -86,35 +86,14 @@ echo_info "Applying IP forwarding settings from $SYSCTL_PATH..."
 sysctl -p "$SYSCTL_PATH"
 echo_success "IP forwarding configured."
 
-# 5) Add the new user and add to sudoers
-if id "$NEW_USER" &>/dev/null; then
-    echo_info "User '$NEW_USER' already exists. Skipping user creation."
-else
-    echo_info "Creating user '$NEW_USER'..."
-    useradd -m -s /bin/bash "$NEW_USER"
-    echo "$NEW_USER:$USER_PASS" | chpasswd
-    usermod -aG sudo "$NEW_USER"
-    echo_success "User '$NEW_USER' created and added to sudoers."
-fi
-
-# 6) Disable root login in SSH config
-echo_info "Disabling root login via SSH..."
-SSHD_CONFIG="/etc/ssh/sshd_config"
-if grep -q "^PermitRootLogin no" "$SSHD_CONFIG"; then
-    echo_info "Root login is already disabled."
-else
-    sed -i 's/^PermitRootLogin .*/PermitRootLogin no/' "$SSHD_CONFIG"
-    echo_success "Root login disabled in SSH configuration."
-fi
-
-# 7) Update and upgrade the system
+# 5) Update and upgrade the system first
 echo_info "Updating package lists..."
 apt-get update -y
 echo_info "Upgrading installed packages..."
 apt-get upgrade -y
 echo_success "System update and upgrade completed."
 
-# 8) Add backports if Debian 11 (Bullseye)
+# 6) Add backports if Debian 11 (Bullseye)
 DEBIAN_VERSION=$(get_debian_version)
 if [[ "$DEBIAN_VERSION" == "11"* ]]; then
     echo_info "Debian 11 detected. Adding backports to sources.list..."
@@ -131,10 +110,31 @@ else
     echo_info "Debian version is not 11. Skipping backports addition."
 fi
 
-# 9) Install required packages
+# 7) Install required packages early
 echo_info "Installing required packages: sudo, btop, curl, nano, nginx, certbot..."
 apt-get install -y sudo btop curl nano nginx certbot python3-certbot-nginx
 echo_success "Required packages installed."
+
+# 8) Add the new user and add to sudoers
+if id "$NEW_USER" &>/dev/null; then
+    echo_info "User '$NEW_USER' already exists. Skipping user creation."
+else
+    echo_info "Creating user '$NEW_USER'..."
+    useradd -m -s /bin/bash "$NEW_USER"
+    echo "$NEW_USER:$USER_PASS" | chpasswd
+    usermod -aG sudo "$NEW_USER"
+    echo_success "User '$NEW_USER' created and added to sudoers."
+fi
+
+# 9) Disable root login in SSH config
+echo_info "Disabling root login via SSH..."
+SSHD_CONFIG="/etc/ssh/sshd_config"
+if grep -q "^PermitRootLogin no" "$SSHD_CONFIG"; then
+    echo_info "Root login is already disabled."
+else
+    sed -i 's/^PermitRootLogin .*/PermitRootLogin no/' "$SSHD_CONFIG"
+    echo_success "Root login disabled in SSH configuration."
+fi
 
 # 10) Ensure gnupg is installed to prevent 'gpg: command not found' error
 echo_info "Ensuring 'gnupg' is installed to prevent 'gpg: command not found' errors..."
