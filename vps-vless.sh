@@ -18,9 +18,22 @@ function echo_error() {
 
 # Ensure the script is run as root
 if [ "$EUID" -ne 0 ]; then
-    echo_error "Please run as root."
+    echo_error "Please run this script as root."
     exit 1
 fi
+
+# Function to get Debian version
+get_debian_version() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo "$VERSION_ID"
+    elif [ -f /etc/debian_version ]; then
+        cat /etc/debian_version
+    else
+        echo_error "Cannot determine Debian version."
+        exit 1
+    fi
+}
 
 # 1) Prompt for user input
 read -p "Enter the desired hostname: " NEW_HOSTNAME
@@ -47,18 +60,44 @@ echo_info "Setting timezone to 'Asia/Singapore'..."
 timedatectl set-timezone Asia/Singapore
 echo_success "Timezone set to 'Asia/Singapore'."
 
-# 4) Add the new user and add to sudoers
-if id "$NEW_USER" &>/dev/null; then
-    echo_info "User $NEW_USER already exists. Skipping user creation."
+# 4) Enable IP Forwarding
+echo_info "Configuring IP forwarding..."
+
+SYSCTL_CONF_DIR="/etc/sysctl.d"
+SYSCTL_FILE="99-tailscale.conf"
+
+if [ -d "$SYSCTL_CONF_DIR" ]; then
+    echo_info "Using /etc/sysctl.d/$SYSCTL_FILE for IP forwarding settings."
+    {
+        echo 'net.ipv4.ip_forward = 1'
+        echo 'net.ipv6.conf.all.forwarding = 1'
+    } | tee -a "$SYSCTL_CONF_DIR/$SYSCTL_FILE"
+    SYSCTL_PATH="$SYSCTL_CONF_DIR/$SYSCTL_FILE"
 else
-    echo_info "Creating user $NEW_USER..."
+    echo_info "Using /etc/sysctl.conf for IP forwarding settings."
+    {
+        echo 'net.ipv4.ip_forward = 1'
+        echo 'net.ipv6.conf.all.forwarding = 1'
+    } | tee -a /etc/sysctl.conf
+    SYSCTL_PATH="/etc/sysctl.conf"
+fi
+
+echo_info "Applying IP forwarding settings from $SYSCTL_PATH..."
+sysctl -p "$SYSCTL_PATH"
+echo_success "IP forwarding configured."
+
+# 5) Add the new user and add to sudoers
+if id "$NEW_USER" &>/dev/null; then
+    echo_info "User '$NEW_USER' already exists. Skipping user creation."
+else
+    echo_info "Creating user '$NEW_USER'..."
     useradd -m -s /bin/bash "$NEW_USER"
     echo "$NEW_USER:$USER_PASS" | chpasswd
     usermod -aG sudo "$NEW_USER"
-    echo_success "User $NEW_USER created and added to sudoers."
+    echo_success "User '$NEW_USER' created and added to sudoers."
 fi
 
-# 5) Disable root login in SSH config
+# 6) Disable root login in SSH config
 echo_info "Disabling root login via SSH..."
 SSHD_CONFIG="/etc/ssh/sshd_config"
 if grep -q "^PermitRootLogin no" "$SSHD_CONFIG"; then
@@ -68,46 +107,51 @@ else
     echo_success "Root login disabled in SSH configuration."
 fi
 
-# 6) Update and upgrade the system
+# 7) Update and upgrade the system
 echo_info "Updating package lists..."
 apt-get update -y
 echo_info "Upgrading installed packages..."
 apt-get upgrade -y
 echo_success "System update and upgrade completed."
 
-# 7) Add backports if Debian 11 (Bullseye)
-if [ -f /etc/debian_version ]; then
-    DEBIAN_VERSION=$(lsb_release -sr)
-    if [[ "$DEBIAN_VERSION" == "11"* ]]; then
-        echo_info "Debian 11 detected. Adding backports to sources.list..."
-        BACKPORTS_ENTRY1="deb http://deb.debian.org/debian bullseye-backports main contrib non-free"
-        BACKPORTS_ENTRY2="deb-src http://deb.debian.org/debian bullseye-backports main contrib non-free"
-        if grep -Fxq "$BACKPORTS_ENTRY1" /etc/apt/sources.list && grep -Fxq "$BACKPORTS_ENTRY2" /etc/apt/sources.list; then
-            echo_info "Backports already added."
-        else
-            echo -e "\n$BACKPORTS_ENTRY1\n$BACKPORTS_ENTRY2" >> /etc/apt/sources.list
-            echo_success "Backports added to sources.list."
-            apt-get update -y
-        fi
+# 8) Add backports if Debian 11 (Bullseye)
+DEBIAN_VERSION=$(get_debian_version)
+if [[ "$DEBIAN_VERSION" == "11"* ]]; then
+    echo_info "Debian 11 detected. Adding backports to sources.list..."
+    BACKPORTS_ENTRY1="deb http://deb.debian.org/debian bullseye-backports main contrib non-free"
+    BACKPORTS_ENTRY2="deb-src http://deb.debian.org/debian bullseye-backports main contrib non-free"
+    if grep -Fxq "$BACKPORTS_ENTRY1" /etc/apt/sources.list && grep -Fxq "$BACKPORTS_ENTRY2" /etc/apt/sources.list; then
+        echo_info "Backports already added."
     else
-        echo_info "Debian version is not 11. Skipping backports addition."
+        echo -e "\n$BACKPORTS_ENTRY1\n$BACKPORTS_ENTRY2" >> /etc/apt/sources.list
+        echo_success "Backports added to sources.list."
+        apt-get update -y
     fi
 else
-    echo_error "This script is intended for Debian-based systems."
-    exit 1
+    echo_info "Debian version is not 11. Skipping backports addition."
 fi
 
-# 8) Install required packages
+# 9) Install required packages
 echo_info "Installing required packages: btop, curl, nano, nginx, certbot..."
-apt-get install -y btop lsb_release curl nano nginx certbot python3-certbot-nginx
+apt-get install -y btop curl nano nginx certbot python3-certbot-nginx
 echo_success "Required packages installed."
 
-# 9) Install Tailscaled
+# 10) Ensure gnupg is installed to prevent 'gpg: command not found' error
+echo_info "Ensuring 'gnupg' is installed to prevent 'gpg: command not found' errors..."
+if ! command -v gpg &> /dev/null; then
+    echo_info "'gpg' not found. Installing 'gnupg2'..."
+    apt-get install -y gnupg2
+    echo_success "'gnupg2' installed."
+else
+    echo_info "'gpg' is already installed."
+fi
+
+# 11) Install Tailscaled
 echo_info "Installing Tailscaled..."
 curl -fsSL https://tailscale.com/install.sh | sh
 echo_success "Tailscaled installed."
 
-# 10) Enable and configure Tailscale as an exit node with SSH
+# 12) Enable and configure Tailscale as an exit node with SSH
 echo_info "Enabling and configuring Tailscale as an exit node with SSH access..."
 systemctl enable --now tailscaled
 
@@ -125,20 +169,26 @@ else
 fi
 echo_success "Tailscale configured as an exit node with SSH access enabled."
 
-# 11) Install Cloudflare Warp CLI
+# 13) Install Cloudflare Warp CLI
 echo_info "Installing Cloudflare Warp CLI..."
 # Add Cloudflare GPG key
+echo_info "Adding Cloudflare Warp GPG key..."
 curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+echo_success "Cloudflare Warp GPG key added."
 
 # Add Cloudflare Warp repository
-echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/cloudflare-client.list
+DEBIAN_CODENAME=$(grep VERSION_CODENAME /etc/os-release | cut -d= -f2)
+echo_info "Adding Cloudflare Warp repository for Debian codename '$DEBIAN_CODENAME'..."
+echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $DEBIAN_CODENAME main" | tee /etc/apt/sources.list.d/cloudflare-client.list
+echo_success "Cloudflare Warp repository added."
 
 # Update and install Cloudflare Warp
+echo_info "Updating package lists and installing Cloudflare Warp CLI..."
 apt-get update -y
 apt-get install -y cloudflare-warp
 echo_success "Cloudflare Warp CLI installed."
 
-# 12) Register and configure Cloudflare Warp
+# 14) Register and configure Cloudflare Warp
 echo_info "Registering Cloudflare Warp and setting it to proxy mode..."
 warp-cli register
 warp-cli set-mode proxy
@@ -147,12 +197,12 @@ warp-cli connect
 warp-cli enable-always-on
 echo_success "Cloudflare Warp configured and enabled."
 
-# 13) Install Xray
+# 15) Install Xray
 echo_info "Installing Xray..."
 bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
 echo_success "Xray installed."
 
-# 14) Set up Xray configuration
+# 16) Set up Xray configuration
 echo_info "Setting up Xray configuration..."
 XRAY_CONFIG="/usr/local/etc/xray/config.json"
 
@@ -164,6 +214,7 @@ for i in {1..5}; do
 done
 
 # Create Xray config with placeholders replaced
+echo_info "Creating Xray configuration file at '$XRAY_CONFIG'..."
 cat > "$XRAY_CONFIG" <<EOF
 {
   "log": {
@@ -225,16 +276,15 @@ cat > "$XRAY_CONFIG" <<EOF
   ]
 }
 EOF
-
 echo_success "Xray configuration set."
 
-# 15) Restart Nginx
+# 17) Restart Nginx
 echo_info "Restarting Nginx..."
 systemctl restart nginx
 echo_success "Nginx restarted."
 
-# 16) Set up Nginx site
-echo_info "Configuring Nginx site..."
+# 18) Set up Nginx site
+echo_info "Configuring Nginx site for domain '$XRAY_DOMAIN'..."
 NGINX_SITE="/etc/nginx/sites-available/$XRAY_DOMAIN"
 
 cat > "$NGINX_SITE" <<EOF
@@ -264,18 +314,20 @@ server {
 }
 EOF
 
-# 17) Enable the Nginx site and restart
-echo_info "Enabling Nginx site and restarting Nginx..."
-ln -s "$NGINX_SITE" /etc/nginx/sites-enabled/ || true
-nginx -t && systemctl restart nginx
-echo_success "Nginx site configured and restarted."
+echo_success "Nginx site configuration file created."
 
-# 18) Obtain SSL certificate with Certbot
-echo_info "Obtaining SSL certificate with Certbot..."
+# 19) Enable the Nginx site and restart
+echo_info "Enabling Nginx site and restarting Nginx..."
+ln -s "$NGINX_SITE" /etc/nginx/sites-enabled/ || echo_info "Nginx site is already enabled."
+nginx -t && systemctl restart nginx
+echo_success "Nginx site enabled and restarted."
+
+# 20) Obtain SSL certificate with Certbot
+echo_info "Obtaining SSL certificate with Certbot for domain '$XRAY_DOMAIN'..."
 certbot --nginx -d "$XRAY_DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" --redirect
 echo_success "SSL certificate obtained and configured."
 
-# 19) Gather and display key details
+# 21) Gather and display key details
 echo_info "Gathering system and configuration details..."
 
 PUBLIC_IPV4=$(curl -4 -s https://ifconfig.me)
@@ -297,7 +349,7 @@ for i in {1..5}; do
 done
 echo "========================"
 
-# 20) Confirmation to restart SSHD
+# 22) Confirmation to restart SSHD
 read -p "Do you want to restart SSH service now? (y/n): " CONFIRM
 if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
     echo_info "Restarting SSH service..."
