@@ -337,11 +337,11 @@ NGINX_SITE="/etc/nginx/sites-available/$XRAY_DOMAIN"
 # Replace 'listen 443 ssl; # managed by Certbot' with 'listen 443 ssl http2; # managed by Certbot'
 sed -i 's/listen 443 ssl; # managed by Certbot/listen 443 ssl http2; # managed by Certbot/' "$NGINX_SITE"
 
-# Check if 'listen [::]:443;' exists
-if grep -q "listen \[::\]:443;" "$NGINX_SITE"; then
-    echo_info "'listen [::]:443;' already exists in Nginx configuration."
+# Check if 'listen [::]:443 ssl http2;' exists
+if grep -q "listen \[::\]:443 ssl http2;" "$NGINX_SITE"; then
+    echo_info "'listen [::]:443 ssl http2;' already exists in Nginx configuration."
 else
-    echo_info "'listen [::]:443;'' not found. Adding 'listen [::]:443 ssl http2;' after 'listen 443 ssl http2; # managed by Certbot'."
+    echo_info "'listen [::]:443;' not found. Adding 'listen [::]:443 ssl http2;' after 'listen 443 ssl http2; # managed by Certbot'."
     # Insert 'listen [::]:443 ssl http2;' after 'listen 443 ssl http2; # managed by Certbot'
     sed -i '/listen 443 ssl http2; # managed by Certbot/a \    listen [::]:443 ssl http2;' "$NGINX_SITE"
     echo_success "'listen [::]:443 ssl http2;' added to Nginx configuration."
@@ -378,8 +378,84 @@ for i in {1..5}; do
 done
 echo "========================"
 
+# === Begin: Add Healthcheck Functionality ===
+echo_info "Would you like to add a healthcheck? This will set up a healthcheck script and service in the user's home directory."
+
+read -p "Do you want to add a healthcheck? (y/n): " ADD_HEALTHCHECK
+
+if [[ "$ADD_HEALTHCHECK" =~ ^[Yy]$ ]]; then
+    read -p "Enter the Healthcheck ID: " HEALTHCHECK_ID
+
+    # Define user home directory
+    USER_HOME=$(eval echo "~$NEW_USER")
+
+    # Create healthcheck directory
+    HEALTHCHECK_DIR="$USER_HOME/healthcheck"
+    echo_info "Creating healthcheck directory at '$HEALTHCHECK_DIR'..."
+    mkdir -p "$HEALTHCHECK_DIR"
+    chown "$NEW_USER":"$NEW_USER" "$HEALTHCHECK_DIR"
+    echo_success "Healthcheck directory created and owned by '$NEW_USER'."
+
+    # Create healthcheck.sh
+    HEALTHCHECK_SCRIPT="$HEALTHCHECK_DIR/healthcheck.sh"
+    echo_info "Creating healthcheck script at '$HEALTHCHECK_SCRIPT'..."
+    cat > "$HEALTHCHECK_SCRIPT" <<EOF
+#!/bin/bash
+
+healthcheck_url="https://hc-ping.com/$HEALTHCHECK_ID"
+ping_interval=1200  # Ping interval in seconds (20 minutes)
+
+while true; do
+    response=\$(curl -s -o /dev/null -w "%{http_code}" "\$healthcheck_url")
+    
+    if [ "\$response" -eq 200 ]; then
+        echo "Healthcheck succeeded for \$healthcheck_url"
+    else
+        echo "Healthcheck failed for \$healthcheck_url. Status code: \$response"
+    fi
+    
+    sleep "\$ping_interval"
+done
+EOF
+    chown "$NEW_USER":"$NEW_USER" "$HEALTHCHECK_SCRIPT"
+    chmod +x "$HEALTHCHECK_SCRIPT"
+    echo_success "Healthcheck script created, owned by '$NEW_USER', and made executable."
+
+    # Create systemd service
+    SERVICE_FILE="/etc/systemd/system/healthcheck_pinger.service"
+    echo_info "Creating systemd service file at '$SERVICE_FILE'..."
+    cat > "$SERVICE_FILE" <<EOF
+[Unit]
+Description=Healthcheck Pinger
+After=network.target
+
+[Service]
+ExecStart=$HEALTHCHECK_SCRIPT
+User=$NEW_USER
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    echo_success "Systemd service file created."
+
+    # Reload systemd daemon to recognize new service
+    echo_info "Reloading systemd daemon..."
+    systemctl daemon-reload
+
+    # Enable and start the healthcheck service
+    echo_info "Enabling and starting the healthcheck_pinger.service..."
+    systemctl enable healthcheck_pinger.service
+    systemctl start healthcheck_pinger.service
+    echo_success "Healthcheck service enabled and started."
+else
+    echo_info "Healthcheck setup skipped."
+fi
+# === End: Add Healthcheck Functionality ===
+
 # 22) Confirmation to restart SSHD
-read -p "Do you want to restart SSH service now? (y/n): " CONFIRM
+read -p "Do you want to restart the SSH service now? (y/n): " CONFIRM
 if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
     echo_info "Restarting SSH service..."
     systemctl restart sshd
