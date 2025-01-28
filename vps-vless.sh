@@ -341,10 +341,18 @@ sed -i 's/listen 443 ssl; # managed by Certbot/listen 443 ssl http2; # managed b
 if grep -q "listen \[::\]:443 ssl http2;" "$NGINX_SITE"; then
     echo_info "'listen [::]:443 ssl http2;' already exists in Nginx configuration."
 else
-    echo_info "'listen [::]:443;' not found. Adding 'listen [::]:443 ssl http2;' after 'listen 443 ssl http2; # managed by Certbot'."
-    # Insert 'listen [::]:443 ssl http2;' after 'listen 443 ssl http2; # managed by Certbot'
-    sed -i '/listen 443 ssl http2; # managed by Certbot/a \    listen [::]:443 ssl http2;' "$NGINX_SITE"
-    echo_success "'listen [::]:443 ssl http2;' added to Nginx configuration."
+    # Check if 'listen [::]:443 ssl;' exists
+    if grep -q "listen \[::\]:443 ssl;" "$NGINX_SITE"; then
+        echo_info "'listen [::]:443 ssl;' found. Adding 'http2' to it."
+        # Replace 'listen [::]:443 ssl;' with 'listen [::]:443 ssl http2;'
+        sed -i 's/listen \[::\]:443 ssl;/listen [::]:443 ssl http2;/' "$NGINX_SITE"
+        echo_success "'listen [::]:443 ssl http2;' added to existing 'listen [::]:443 ssl;' directive."
+    else
+        echo_info "'listen [::]:443 ssl http2;' and 'listen [::]:443 ssl;' not found. Adding 'listen [::]:443 ssl http2;' after 'listen 443 ssl http2; # managed by Certbot'."
+        # Insert 'listen [::]:443 ssl http2;' after 'listen 443 ssl http2; # managed by Certbot'
+        sed -i '/listen 443 ssl http2; # managed by Certbot/a \    listen [::]:443 ssl http2;' "$NGINX_SITE"
+        echo_success "'listen [::]:443 ssl http2;' added to Nginx configuration."
+    fi
 fi
 
 # Test Nginx configuration and reload
