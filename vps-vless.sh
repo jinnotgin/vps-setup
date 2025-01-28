@@ -289,6 +289,9 @@ NGINX_SITE="/etc/nginx/sites-available/$XRAY_DOMAIN"
 cat > "$NGINX_SITE" <<EOF
 server {
     server_name $XRAY_DOMAIN;
+    listen 80;
+    listen [::]:80;
+    
     root /var/www/html;
     index index.html index.htm index.nginx-debian.html;
     
