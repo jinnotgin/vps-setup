@@ -132,8 +132,8 @@ else
 fi
 
 # 9) Install required packages
-echo_info "Installing required packages: btop, curl, nano, nginx, certbot..."
-apt-get install -y btop curl nano nginx certbot python3-certbot-nginx
+echo_info "Installing required packages: sudo, btop, curl, nano, nginx, certbot..."
+apt-get install -y sudo btop curl nano nginx certbot python3-certbot-nginx
 echo_success "Required packages installed."
 
 # 10) Ensure gnupg is installed to prevent 'gpg: command not found' error
@@ -291,10 +291,6 @@ server {
     server_name $XRAY_DOMAIN;
     root /var/www/html;
     index index.html index.htm index.nginx-debian.html;
-
-    location /.well-known/acme-challenge/ {
-        root /var/www/html;
-    }
     
     location / {
         try_files \$uri \$uri/ =404;
