@@ -190,11 +190,10 @@ echo_success "Cloudflare Warp CLI installed."
 
 # 14) Register and configure Cloudflare Warp
 echo_info "Registering Cloudflare Warp and setting it to proxy mode..."
-warp-cli register
-warp-cli set-mode proxy
-warp-cli set-proxy-port 40001
+warp-cli registration new
+warp-cli mode proxy
+warp-cli proxy port 40001
 warp-cli connect
-warp-cli enable-always-on
 echo_success "Cloudflare Warp configured and enabled."
 
 # 15) Install Xray
