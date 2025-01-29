@@ -169,7 +169,39 @@ else
 fi
 echo_success "Tailscale configured as an exit node with SSH access enabled."
 
-# 13) Install Cloudflare Warp CLI
+# 13) Install and configure UFW
+echo_info "Installing and configuring UFW (Uncomplicated Firewall)..."
+apt-get install -y ufw
+echo_success "UFW installed."
+
+# Set default UFW policies
+echo_info "Setting default UFW policies..."
+ufw default deny incoming
+ufw default allow outgoing
+echo_success "Default UFW policies set (Incoming: Deny, Outgoing: Allow)."
+
+# Allow SSH
+echo_info "Allowing SSH (port 22)..."
+ufw allow ssh
+echo_success "SSH allowed."
+
+# Allow HTTP and HTTPS
+echo_info "Allowing HTTP (port 80) and HTTPS (port 443)..."
+ufw allow http
+ufw allow https
+echo_success "HTTP and HTTPS allowed."
+
+# Allow all Tailscale traffic
+echo_info "Allowing all traffic on Tailscale interface 'tailscale0'..."
+ufw allow in on tailscale0
+echo_success "All Tailscale traffic allowed."
+
+# Enable UFW
+echo_info "Enabling UFW..."
+echo "y" | ufw enable
+echo_success "UFW enabled and configured."
+
+# 14) Install Cloudflare Warp CLI
 echo_info "Installing Cloudflare Warp CLI..."
 # Add Cloudflare GPG key
 echo_info "Adding Cloudflare Warp GPG key..."
@@ -188,7 +220,7 @@ apt-get update -y
 apt-get install -y cloudflare-warp
 echo_success "Cloudflare Warp CLI installed."
 
-# 14) Register and configure Cloudflare Warp
+# 15) Register and configure Cloudflare Warp
 echo_info "Registering Cloudflare Warp and setting it to proxy mode..."
 warp-cli registration new
 warp-cli mode proxy
@@ -196,12 +228,12 @@ warp-cli proxy port 40001
 warp-cli connect
 echo_success "Cloudflare Warp configured and enabled."
 
-# 15) Install Xray
+# 16) Install Xray
 echo_info "Installing Xray..."
 bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
 echo_success "Xray installed."
 
-# 16) Set up Xray configuration
+# 17) Set up Xray configuration
 echo_info "Setting up Xray configuration..."
 XRAY_CONFIG="/usr/local/etc/xray/config.json"
 
@@ -277,12 +309,12 @@ cat > "$XRAY_CONFIG" <<EOF
 EOF
 echo_success "Xray configuration set."
 
-# 17) Restart Nginx
+# 18) Restart Nginx
 echo_info "Restarting Nginx..."
 systemctl restart nginx
 echo_success "Nginx restarted."
 
-# 18) Set up Nginx site
+# 19) Set up Nginx site
 echo_info "Configuring Nginx site for domain '$XRAY_DOMAIN'..."
 NGINX_SITE="/etc/nginx/sites-available/$XRAY_DOMAIN"
 
@@ -318,13 +350,13 @@ EOF
 
 echo_success "Nginx site configuration file created."
 
-# 19) Enable the Nginx site and restart
+# 20) Enable the Nginx site and restart
 echo_info "Enabling Nginx site and restarting Nginx..."
 ln -s "$NGINX_SITE" /etc/nginx/sites-enabled/ || echo_info "Nginx site is already enabled."
 nginx -t && systemctl restart nginx
 echo_success "Nginx site enabled and restarted."
 
-# 20) Obtain SSL certificate with Certbot
+# 21) Obtain SSL certificate with Certbot
 echo_info "Obtaining SSL certificate with Certbot for domain '$XRAY_DOMAIN'..."
 certbot --nginx -d "$XRAY_DOMAIN" --non-interactive --agree-tos -m "$LE_EMAIL" --redirect
 echo_success "SSL certificate obtained and configured."
@@ -364,7 +396,7 @@ systemctl reload nginx
 echo_success "Nginx configuration updated for HTTP/2 support."
 # === End Modifications After Certbot ===
 
-# 21) Gather and display key details
+# 22) Gather and display key details
 echo_info "Gathering system and configuration details..."
 
 PUBLIC_IPV4=$(curl -4 -s https://ifconfig.me)
@@ -462,7 +494,7 @@ else
 fi
 # === End: Add Healthcheck Functionality ===
 
-# 22) Confirmation to restart SSHD
+# 23) Confirmation to restart SSHD
 read -p "Do you want to restart the SSH service now? (y/n): " CONFIRM
 if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
     echo_info "Restarting SSH service..."
