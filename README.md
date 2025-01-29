@@ -1,6 +1,6 @@
 # VPS Setup Scripts
 
-This repository contains two Bash scripts for setting up a VPS with essential configurations and services:
+This repository contains two Bash scripts for setting up a Virtual Private Server (VPS) with essential configurations and services:
 
 - **vps-basic.sh**: A script to configure a Debian-based VPS with essential settings, security, and network configurations.
 - **vps-vless.sh**: A script that builds upon `vps-basic.sh` by setting up an Xray VLESS server with Nginx and Cloudflare Warp.
