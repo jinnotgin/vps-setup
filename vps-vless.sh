@@ -93,12 +93,24 @@ echo_info "Upgrading installed packages..."
 apt-get upgrade -y
 echo_success "System update and upgrade completed."
 
-# 6) Add backports if Debian 11 (Bullseye)
+# 6) Add backports if Debian 11 (Bullseye) or Debian 12 (Bookworm)
 DEBIAN_VERSION=$(get_debian_version)
+
 if [[ "$DEBIAN_VERSION" == "11"* ]]; then
-    echo_info "Debian 11 detected. Adding backports to sources.list..."
+    echo_info "Debian 11 detected. Adding Bullseye backports to sources.list..."
     BACKPORTS_ENTRY1="deb http://deb.debian.org/debian bullseye-backports main contrib non-free"
     BACKPORTS_ENTRY2="deb-src http://deb.debian.org/debian bullseye-backports main contrib non-free"
+elif [[ "$DEBIAN_VERSION" == "12"* ]]; then
+    echo_info "Debian 12 detected. Adding Bookworm backports to sources.list..."
+    BACKPORTS_ENTRY1="deb http://deb.debian.org/debian bookworm-backports main contrib non-free"
+    BACKPORTS_ENTRY2="deb-src http://deb.debian.org/debian bookworm-backports main contrib non-free"
+else
+    echo_info "Debian version is not 11 or 12. Skipping backports addition."
+    BACKPORTS_ENTRY1=""
+    BACKPORTS_ENTRY2=""
+fi
+
+if [[ -n "$BACKPORTS_ENTRY1" && -n "$BACKPORTS_ENTRY2" ]]; then
     if grep -Fxq "$BACKPORTS_ENTRY1" /etc/apt/sources.list && grep -Fxq "$BACKPORTS_ENTRY2" /etc/apt/sources.list; then
         echo_info "Backports already added."
     else
@@ -106,8 +118,6 @@ if [[ "$DEBIAN_VERSION" == "11"* ]]; then
         echo_success "Backports added to sources.list."
         apt-get update -y
     fi
-else
-    echo_info "Debian version is not 11. Skipping backports addition."
 fi
 
 # 7) Install required packages early
