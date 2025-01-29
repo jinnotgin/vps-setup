@@ -19,7 +19,7 @@ This repository contains two Bash scripts for setting up a Virtual Private Serve
 - Sets a custom hostname.
 - Creates a new user and adds it to the sudo group.
 - Configures system timezone to `Asia/Singapore`.
-- Enables IP forwarding.
+- Enables IP forwarding (for Tailscale).
 - Updates and upgrades system packages.
 - Installs essential packages (`sudo`, `btop`, `curl`, `nano`, `nginx`, `certbot`).
 - Disables root SSH login.
