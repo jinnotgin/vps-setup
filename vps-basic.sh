@@ -199,7 +199,43 @@ echo_info "Enabling UFW..."
 echo "y" | ufw enable
 echo_success "UFW enabled and configured."
 
-# 14) Gather and display key details
+# === FAIL2BAN SECTION START ===
+# 14) Install and configure Fail2Ban
+echo_info "Installing Fail2Ban..."
+apt-get install -y fail2ban
+echo_success "Fail2Ban installed."
+
+echo_info "Configuring Fail2Ban for SSH protection..."
+# Create a local jail configuration to override default settings
+cat > /etc/fail2ban/jail.local <<EOF
+[DEFAULT]
+# Ban IP for 10 minutes after 5 failed attempts
+bantime = 600
+findtime = 600
+maxretry = 5
+backend = auto
+
+[sshd]
+enabled = true
+port = ssh
+logpath = %(sshd_log)s
+backend = %(sshd_backend)s
+EOF
+
+echo_success "Fail2Ban configuration file created at /etc/fail2ban/jail.local."
+
+# Restart and enable Fail2Ban service
+echo_info "Enabling and starting Fail2Ban service..."
+systemctl enable fail2ban
+systemctl restart fail2ban
+echo_success "Fail2Ban service enabled and started."
+
+# Optional: Provide status of Fail2Ban
+echo_info "Checking Fail2Ban status..."
+fail2ban-client status sshd
+# === FAIL2BAN SECTION END ===
+
+# 15) Gather and display key details
 echo_info "Gathering system and configuration details..."
 
 PUBLIC_IPV4=$(curl -4 -s https://ifconfig.me)
@@ -291,7 +327,7 @@ else
 fi
 # === End: Add Healthcheck Functionality ===
 
-# 15) Confirmation to restart SSHD
+# 16) Confirmation to restart SSHD
 read -p "Do you want to restart the SSH service now? (y/n): " CONFIRM
 if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
     echo_info "Restarting SSH service..."
