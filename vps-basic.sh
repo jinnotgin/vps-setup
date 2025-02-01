@@ -119,7 +119,7 @@ fi
 
 # 7) Install required packages early
 echo_info "Installing required packages: sudo, btop, curl, nano, nginx, certbot..."
-apt-get install -y sudo btop curl nano nginx certbot python3-certbot-nginx
+apt-get install -y sudo btop curl nano rsyslog nginx certbot python3-certbot-nginx
 echo_success "Required packages installed."
 
 # 8) Add the new user and add to sudoers
