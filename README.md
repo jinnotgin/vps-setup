@@ -46,7 +46,7 @@ Includes everything from `vps-basic.sh` and adds:
 ```bash
 wget https://raw.githubusercontent.com/jinnotgin/vps-setup/refs/heads/main/vps-basic.sh
 chmod +x vps-basic.sh
-sudo ./vps-basic.sh
+./vps-basic.sh
 ```
 
 ### Running `vps-vless.sh`
@@ -54,7 +54,7 @@ sudo ./vps-basic.sh
 ```bash
 wget https://raw.githubusercontent.com/jinnotgin/vps-setup/refs/heads/main/vps-vless.sh
 chmod +x vps-vless.sh
-sudo ./vps-vless.sh
+./vps-vless.sh
 ```
 
 ## User Inputs
