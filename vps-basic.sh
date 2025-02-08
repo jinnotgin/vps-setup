@@ -242,6 +242,7 @@ echo_success "Fail2Ban service enabled and started."
 
 # Optional: Provide status of Fail2Ban
 echo_info "Checking Fail2Ban status..."
+sleep 5
 fail2ban-client status sshd
 # === FAIL2BAN SECTION END ===
 
