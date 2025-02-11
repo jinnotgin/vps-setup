@@ -2,22 +2,29 @@
 # setup_shadowsocks_multi.sh
 #
 # This script installs and configures Shadowsocks-libev on a Debian-like system.
-# It gathers configuration details from the user (all at the beginning),
-# supports setting up multiple server instances (each with its own port and a generated password),
+# It gathers configuration details from the user up front, supports setting up
+# multiple server instances (each with its own port and a generated password),
 # and automatically adds UFW firewall rules if UFW is installed.
 #
 # The default encryption method is set to chacha20-ietf-poly1305.
 #
+# A debugging trap is included to print errors when a command fails.
+#
+# If a systemd template for multiple instances (shadowsocks-libev@.service) is not found,
+# the script will create a basic one.
+#
 # Usage:
 #   sudo ./setup_shadowsocks_multi.sh
+#
+# Author: [Your Name]
+# Date: [Today's Date]
 
+# Exit immediately if a command exits with a non-zero status.
+# Also treat unset variables as an error and propagate errors in pipelines.
 set -euo pipefail
 
-# Check if the script is run as root.
-if [[ $EUID -ne 0 ]]; then
-  echo "Error: This script must be run as root (or via sudo)." >&2
-  exit 1
-fi
+# Debugging trap: when an error occurs, print the line number, the command, and the exit code.
+trap 'echo "Error on line ${LINENO}: command \"${BASH_COMMAND}\" exited with code $?"' ERR
 
 echo "###############################"
 echo "Shadowsocks-libev Multi-Instance Setup"
@@ -62,7 +69,8 @@ default_port=8388
 
 # Function to generate a random alphanumeric password of 16 characters.
 generate_password() {
-    tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16
+    # Using "|| true" to ignore the SIGPIPE error when head exits early.
+    tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16 || true
 }
 
 # Loop to gather details for each instance.
@@ -123,6 +131,30 @@ apt update
 echo "Installing shadowsocks-libev..."
 apt install -y shadowsocks-libev
 
+# Check for the systemd template unit file for multi-instance usage.
+echo "Checking for shadowsocks-libev systemd template..."
+if [ ! -f /lib/systemd/system/shadowsocks-libev@.service ] && [ ! -f /etc/systemd/system/shadowsocks-libev@.service ]; then
+    echo "Systemd template not found. Creating /etc/systemd/system/shadowsocks-libev@.service..."
+    cat << 'EOF' > /etc/systemd/system/shadowsocks-libev@.service
+[Unit]
+Description=Shadowsocks-libev custom instance %I
+After=network.target
+
+[Service]
+Type=simple
+User=nobody
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=true
+ExecStart=/usr/bin/ss-server -c /etc/shadowsocks-libev/%i.json
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+fi
+
 # Loop over each instance and configure it.
 echo ""
 echo "Configuring Shadowsocks-libev instances..."
@@ -155,7 +187,7 @@ EOF
 
     echo "Configuration for instance '$inst_name' written."
 
-    # Enable and restart the instance using the systemd template.
+    # Enable and start the instance using the systemd template.
     echo "Enabling and starting Shadowsocks-libev instance '$inst_name'..."
     systemctl enable shadowsocks-libev@"$inst_name"
     systemctl restart shadowsocks-libev@"$inst_name"
