@@ -148,6 +148,7 @@ NoNewPrivileges=true
 ExecStart=/usr/bin/ss-server -c /etc/shadowsocks-libev/%i.json
 ExecReload=/bin/kill -HUP $MAINPID
 Restart=on-failure
+LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
