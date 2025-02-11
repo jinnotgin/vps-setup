@@ -3,16 +3,13 @@
 #
 # This script installs and configures Shadowsocks-libev on a Debian-like system.
 # It gathers configuration details from the user (all at the beginning),
-# supports setting up multiple server instances (each with its own port and password),
+# supports setting up multiple server instances (each with its own port and a generated password),
 # and automatically adds UFW firewall rules if UFW is installed.
 #
 # The default encryption method is set to chacha20-ietf-poly1305.
 #
 # Usage:
 #   sudo ./setup_shadowsocks_multi.sh
-#
-# Author: [Your Name]
-# Date: [Today's Date]
 
 set -euo pipefail
 
@@ -63,6 +60,11 @@ declare -a instance_fastopens
 # Default starting port.
 default_port=8388
 
+# Function to generate a random alphanumeric password of 16 characters.
+generate_password() {
+    tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16
+}
+
 # Loop to gather details for each instance.
 for (( i = 1; i <= instance_count; i++ )); do
     echo ""
@@ -85,12 +87,9 @@ for (( i = 1; i <= instance_count; i++ )); do
     # Update the default port for the next instance.
     default_port=$((port + 1))
     
-    # Password (required).
-    read -rp "Enter password for instance '$instance_name': " password
-    if [[ -z $password ]]; then
-        echo "Error: Password cannot be empty."
-        exit 1
-    fi
+    # Generate a secure random password (alphanumeric).
+    password=$(generate_password)
+    echo "Generated password for instance '$instance_name': $password"
     instance_passwords+=("$password")
     
     # Encryption method (default: chacha20-ietf-poly1305).
@@ -161,7 +160,7 @@ EOF
     systemctl enable shadowsocks-libev@"$inst_name"
     systemctl restart shadowsocks-libev@"$inst_name"
 
-    # If UFW is installed, open the port for TCP and UDP.
+    # If UFW is installed, open the port for both TCP and UDP.
     if $ufw_installed; then
         echo "Adding UFW rules for port $port..."
         ufw allow "$port"/tcp
